@@ -1,4 +1,63 @@
-== Opus audio codec ==
+# esp-libopus
+
+*Original README content further below*
+
+This repository is a port of the original Opus code for the ESP32. It
+provides a component.mk makefile with the necessary configuration to compile and
+use the Opus audio codec on the ESP32. It also removes the original build system
+of Opus to not clutter the filetree and confuse the ESP32 build system.
+
+### Usage
+This repository can be added as submodule to any valid ESP32 component directory.
+The easiest way to do this is to create a `component/` directory in the root
+of an ESP project, using `git submodule add` to clone this repo into there,
+and to ensure that this new component is recognized via `make list-components`.
+
+*Note:* Currently the component.mk file might only work for the older build system
+of the ESP-IDF, however creating a config file for the newer build system should
+be fairly trivial.
+
+After adding this component to the build configuration, the "opus.h" file
+can be included. All *fixed point* Opus decoder and encoder methods are available,
+consult the Opus documentation for examples.
+
+#### Important considerations
+Opus is a fairly heavy codec, and it might not always work smoothly on the ESP32.
+The following things have to be taken into account:
+
+- Encoding and Decoding heavily utilize Stack via `alloca`. It is recommended
+to have at least 30kB of Stack reserved for the FreeRTOS thread that is running
+the Opus encoding/decoding (the stack is freed after the Opus call, so a single
+thread can encode and decode).
+- Decoding data on the ESP32 is fairly lightweight, and will consume about 30% of
+the CPU time at 240MHz on a single core, even at 48kHz samplerate. This makes
+it fairly usable.
+- *Encoding* however is much more intensive. 16kHz samplerate
+at encoding complexity 1 will use 70% CPU. 24kHz samplerate at anything above
+complexity 4 will *not be able to run at realtime*. 48kHz can only run at
+realtime with complexity 1, and even then it uses 85% CPU. It still sounds
+understandable at 16kHz if you just need basic VoIP or voice recognition though,
+but don't expect to encode high quality music.
+
+Additionally, the WiFi of the ESP32 is very capable of high throughputs, so
+the Samplerate is rarely an issue. What I have found to be problematic is the
+unstable latency of the network. The ESP will receive in "chunks" of a few
+packets, then pause for about 300ms, give or take.
+If you want to use Opus to stream Audio, make sure to have a bigger buffer of
+one or two seconds worth of audio on the receiving end, so that these lagspikes
+can be smoothed out. Once you do that though it's quite easy to have a very
+nice sounding audio stream.
+
+**Todo:** Add a class that provides an easy to use ESP32 MQTT Audio stream.
+It'll need to handle decoding the data, providing it to the XasWorks audio
+core (which will need a slight rework, oh well), and keeping the buffer in synch
+by varying playback speed a bit (clock drift and stuff).
+
+If I do get around to doing this, it'll be in my [XasWorks](https://github.com/XasWorks/XasCode)
+repository, so check it out.
+
+# Opus audio codec
+*Original readme:*
 
 Opus is a codec for interactive speech and audio transmission over the Internet.
 
@@ -39,101 +98,13 @@ Opus-tools can be found at:
 or on the main Opus website:
  https://opus-codec.org/
 
-== Compiling libopus ==
+## Testing
+**Todo:** Add testing according to the Opus test system. This is currently
+not implemented on the ESP32 variant of libopus
 
-To build from a distribution tarball, you only need to do the following:
-
-    % ./configure
-    % make
-
-To build from the git repository, the following steps are necessary:
-
-0) Set up a development environment:
-
-On an Ubuntu or Debian family Linux distribution:
-
-    % sudo apt-get install git autoconf automake libtool gcc make
-
-On a Fedora/Redhat based Linux:
-
-    % sudo dnf install git autoconf automake libtool gcc make
-
-Or for older Redhat/Centos Linux releases:
-
-    % sudo yum install git autoconf automake libtool gcc make
-
-On Apple macOS, install Xcode and brew.sh, then in the Terminal enter:
-
-    % brew install autoconf automake libtool
-
-1) Clone the repository:
-
-    % git clone https://git.xiph.org/opus.git
-    % cd opus
-
-2) Compiling the source
-
-    % ./autogen.sh
-    % ./configure
-    % make
-
-3) Install the codec libraries (optional)
-
-    % sudo make install
-
-Once you have compiled the codec, there will be a opus_demo executable
-in the top directory.
-
-Usage: opus_demo [-e] <application> <sampling rate (Hz)> <channels (1/2)>
-         <bits per second> [options] <input> <output>
-       opus_demo -d <sampling rate (Hz)> <channels (1/2)> [options]
-         <input> <output>
-
-mode: voip | audio | restricted-lowdelay
-options:
-  -e                : only runs the encoder (output the bit-stream)
-  -d                : only runs the decoder (reads the bit-stream as input)
-  -cbr              : enable constant bitrate; default: variable bitrate
-  -cvbr             : enable constrained variable bitrate; default:
-                      unconstrained
-  -bandwidth <NB|MB|WB|SWB|FB>
-                    : audio bandwidth (from narrowband to fullband);
-                      default: sampling rate
-  -framesize <2.5|5|10|20|40|60>
-                    : frame size in ms; default: 20
-  -max_payload <bytes>
-                    : maximum payload size in bytes, default: 1024
-  -complexity <comp>
-                    : complexity, 0 (lowest) ... 10 (highest); default: 10
-  -inbandfec        : enable SILK inband FEC
-  -forcemono        : force mono encoding, even for stereo input
-  -dtx              : enable SILK DTX
-  -loss <perc>      : simulate packet loss, in percent (0-100); default: 0
-
-input and output are little-endian signed 16-bit PCM files or opus
-bitstreams with simple opus_demo proprietary framing.
-
-== Testing ==
-
-This package includes a collection of automated unit and system tests
-which SHOULD be run after compiling the package especially the first
-time it is run on a new platform.
-
-To run the integrated tests:
-
-    % make check
-
-There is also collection of standard test vectors which are not
-included in this package for size reasons but can be obtained from:
-https://opus-codec.org/docs/opus_testvectors-rfc8251.tar.gz
-
-To run compare the code to these test vectors:
-
-    % curl -OL https://opus-codec.org/docs/opus_testvectors-rfc8251.tar.gz
-    % tar -zxf opus_testvectors-rfc8251.tar.gz
-    % ./tests/run_vectors.sh ./ opus_newvectors 48000
-
-== Portability notes ==
+## Portability notes
+*Note:* Fixed point is used for the ESP32. Floating point is disabled
+via a compiler define. The ESP32's FPU is way too slow for this.
 
 This implementation uses floating-point by default but can be compiled to
 use only fixed-point arithmetic by setting --enable-fixed-point (if using
