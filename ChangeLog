@@ -1,0 +1,21 @@
+# Changes from the main Opus branch
+
+This repository performed a number of minor changes on the Opus sourcecode
+to port it onto the ESP32, in order to comply with its component based
+build system.
+
+## Added files:
+- A component.mk was added to register these source files as new component.
+This component file adds all necessary source folders and include paths, as
+well as defining some local compiler options.
+
+## Removed files:
+- All build files and original makefiles have been removed. They can not
+be used with the ESP32 build system, and cluttered the files a bit. It's
+also not necessary to provide a standalone build option for this component.
+- Any platform-specific optimizations have been removed. This is due to them
+being incompatible with the ESP32 hardware, which sadly does not include
+any kind of hardware optimizations that can be used for Opus.
+- The Testing files have been removed. They have not been added to the ESP32.
+Perhaps in the future someone could write tests to verify that the ESP32
+behaves properly, however so far everything seems functional.
